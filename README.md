@@ -96,7 +96,7 @@ Once you have written your html, css, and javascript, `cd` into the web-dev dire
 start a HTTP server with:
 
 ```
-$ python -m SimpleHTTPServer 8080
+$ python3 -m http.server 8080
 ```
 
 Find your hostname:
