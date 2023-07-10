@@ -1,6 +1,13 @@
 body {
     max-width: 1000px;
     margin: auto;
-    background: #FAFAFA;
-    font-family: Helvetica;
+    background: #E3F7FA;
+    font-family: Impact;
+}
+
+table,
+th,
+td {
+    border: 5px solid black;
+    border-collapse: collapse;
 }
