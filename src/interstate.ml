@@ -1,6 +1,11 @@
 open! Core
 module City = String
-module Interstate = String
+
+module Interstate = struct
+  include String
+
+  let default = ""
+end
 
 module Network = struct
   module Connection = struct
@@ -8,43 +13,36 @@ module Network = struct
       type t = City.t * Interstate.t * City.t [@@deriving compare, sexp]
     end
 
+    include T
     include Comparable.Make (T)
 
     let of_string s =
-      match String.split s ~on:',' with
-      | [ city1; interstate; city2 ] ->
-        Some
-          ( City.of_string city1
-          , Interstate.of_string interstate
-          , City.of_string city2 )
-      | _ -> None
-    ;;
-  end
-
-  let format_connections s =
-    let split_string = String.split_on_chars s ~on:[ ',' ] in
-    let interstate = List.hd_exn split_string in
-    let cities = List.tl_exn split_string in
-    List.concat_map cities ~f:(fun city1 ->
-      List.filter_map cities ~f:(fun city2 ->
-        match String.( <> ) city1 city2 with
-        | true ->
+      let split_string = String.split_on_chars s ~on:[ ',' ] in
+      let interstate = List.hd_exn split_string in
+      let cities = List.tl_exn split_string in
+      List.filter_mapi cities ~f:(fun index city1 ->
+        match List.nth cities (index + 1) with
+        | Some city2 ->
           Some
             ( City.of_string city1
             , Interstate.of_string interstate
             , City.of_string city2 )
-        | false -> None))
-  ;;
+        | _ -> None)
+    ;;
+  end
 
-  type t = Connection.Set.t [@@deriving sexp_of]
+  type t = Connection.Set.t [@@deriving compare, sexp_of]
 
   let of_file input_file =
-    let interstates_with_cities =
-      In_channel.read_lines (File_path.to_string input_file)
-    in
     let connections =
-      List.concat_map interstates_with_cities ~f:(fun s ->
-        format_connections s)
+      In_channel.read_lines (File_path.to_string input_file)
+      |> List.map ~f:(Str.global_replace (Str.regexp {|\.|}) "")
+      |> List.map ~f:(Str.global_replace (Str.regexp {| |}) "_")
+      |> List.concat_map ~f:(fun s ->
+           List.concat_map
+             (Connection.of_string s)
+             ~f:(fun (city1, interstate, city2) ->
+             [ city1, interstate, city2; city2, interstate, city1 ]))
     in
     Connection.Set.of_list connections
   ;;
@@ -67,7 +65,7 @@ let load_command =
         printf !"%{sexp: Network.t}\n" network]
 ;;
 
-module G = Graph.Imperative.Digraph.ConcreteBidirectionalLabeled (City)
+module G = Graph.Imperative.Graph.ConcreteLabeled (City) (Interstate)
 
 module Dot = Graph.Graphviz.Dot (struct
   include G
@@ -107,7 +105,7 @@ let visualize_command =
         Set.iter network ~f:(fun (city1, interstate, city2) ->
           (* [G.add_edge] auomatically adds the endpoints as vertices in the
              graph if they don't already exist. *)
-          G.add_edge graph city1 interstate city2);
+          G.add_edge_e graph (city1, interstate, city2));
         Dot.output_graph
           (Out_channel.create (File_path.to_string output_file))
           graph;
