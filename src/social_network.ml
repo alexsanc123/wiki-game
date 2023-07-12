@@ -155,15 +155,6 @@ let find_friend_group network ~person : Person.t list =
   Hash_set.to_list visited
 ;;
 
-(* then (Hash_set.add visited friend_to_check; let updated_friend_group =
-   current_friend_group :: friend in queue = queue :: updated ;;
-
-   if not (List.is_empty queue) then (let current_friend = List.nth queue 0
-   in let friends_to_check = friends_list network current_friend in let
-   unchecked_friends = List.filter friends_to_check ~f:(fun friend -> not
-   (Hash_set.mem visited friend)) in List.iter unchecked_friends ~f:(fun
-   new_friend -> queue :: new_friend) ) else Set.to_list visited *)
-
 let find_friend_group_command =
   let open Command.Let_syntax in
   Command.basic

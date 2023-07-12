@@ -1,4 +1,31 @@
 open! Core
+module Link = Record
+
+type t =
+  { url : string
+  ; title : string
+  }
+
+  module Network = struct
+    
+    module Connection = struct
+      module T = struct
+        type t = Link.t * Link.t [@@deriving compare, sexp]
+      end
+
+      include T
+      include Comparable.Make (T)
+  
+      let of_string s =
+        match String.split s ~on:',' with
+        | [ x; y ] -> Some (Person.of_string x, Person.of_string y)
+        | _ -> None
+      ;;
+    end
+  
+    type t = Connection.Set.t [@@deriving sexp_of]  
+
+
 
 (* [get_linked_articles] should return a list of wikipedia article lengths
    contained in the input.
@@ -49,6 +76,41 @@ let print_links_command =
       fun () ->
         let contents = File_fetcher.fetch_exn how_to_fetch ~resource in
         List.iter (get_linked_articles contents) ~f:print_endline]
+;;
+
+let get_title link =
+  let split_link = String.split_on_chars link ~on:[ '/' ] in
+  match List.last split_link with Some title -> title | _ -> ""
+;;
+
+let get_content ~how_to_fetch ~link =
+  let new_link =
+    match how_to_fetch with
+    | File_fetcher.How_to_fetch Remote -> "https://en.wikipedia.org/" ^ link
+    | _ -> link
+  in
+  get_linked_articles
+    (File_fetcher.fetch_exn how_to_fetch ~resource:new_link)
+;;
+
+let rec form_link_connections ~link ~max_depth ~how_to_fetch =
+  if max_depth = 0
+  then []
+  else (
+    let their_links = get_content ~how_to_fetch ~link in
+    List.concat_map their_links ~f:(fun link_on_page ->
+      let surface_level_connection =
+        ( { url = link; title = get_title link }
+        , { url = link_on_page; title = get_title link_on_page } )
+      in
+      if List.length (get_content ~how_to_fetch ~link:link_on_page) <> 0
+      then
+        [ surface_level_connection ]
+        @ form_link_connections
+            ~link:link_on_page
+            ~max_depth:(max_depth - 1)
+            ~how_to_fetch
+      else [ surface_level_connection ]))
 ;;
 
 (* [visualize] should explore all linked articles up to a distance of
