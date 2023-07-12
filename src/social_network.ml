@@ -125,10 +125,44 @@ let visualize_command =
 (* [find_friend_group network ~person] returns a list of all people who are
    mutually connected to the provided [person] in the provided [network]. *)
 let find_friend_group network ~person : Person.t list =
-  ignore (network : Network.t);
-  ignore (person : Person.t);
-  failwith "TODO"
+  let network_graph =
+    Set.fold
+      network
+      ~init:Person.Map.empty
+      ~f:(fun init (person1, person2) ->
+      Map.update init person1 ~f:(fun friends ->
+        match friends with
+        | Some list -> list @ [ person2 ]
+        | None -> [ person2 ]))
+  in
+  let visited = String.Hash_set.create () in
+  let to_check = Queue.create () in
+  Queue.enqueue to_check person;
+  let rec traverse () =
+    match Queue.dequeue to_check with
+    | None -> ()
+    | Some friend ->
+      if not (Hash_set.mem visited friend)
+      then (
+        Hash_set.add visited friend;
+        let their_friends = Map.find_exn network_graph friend in
+        List.iter their_friends ~f:(fun friend_to_check ->
+          Queue.enqueue to_check friend_to_check);
+        traverse ())
+      else traverse ()
+  in
+  traverse ();
+  Hash_set.to_list visited
 ;;
+
+(* then (Hash_set.add visited friend_to_check; let updated_friend_group =
+   current_friend_group :: friend in queue = queue :: updated ;;
+
+   if not (List.is_empty queue) then (let current_friend = List.nth queue 0
+   in let friends_to_check = friends_list network current_friend in let
+   unchecked_friends = List.filter friends_to_check ~f:(fun friend -> not
+   (Hash_set.mem visited friend)) in List.iter unchecked_friends ~f:(fun
+   new_friend -> queue :: new_friend) ) else Set.to_list visited *)
 
 let find_friend_group_command =
   let open Command.Let_syntax in
