@@ -1,31 +1,5 @@
 open! Core
-module Link = Record
-
-type t =
-  { url : string
-  ; title : string
-  }
-
-  module Network = struct
-    
-    module Connection = struct
-      module T = struct
-        type t = Link.t * Link.t [@@deriving compare, sexp]
-      end
-
-      include T
-      include Comparable.Make (T)
-  
-      let of_string s =
-        match String.split s ~on:',' with
-        | [ x; y ] -> Some (Person.of_string x, Person.of_string y)
-        | _ -> None
-      ;;
-    end
-  
-    type t = Connection.Set.t [@@deriving sexp_of]  
-
-
+module Title = String
 
 (* [get_linked_articles] should return a list of wikipedia article lengths
    contained in the input.
@@ -79,14 +53,20 @@ let print_links_command =
 ;;
 
 let get_title link =
-  let split_link = String.split_on_chars link ~on:[ '/' ] in
+  let split_link =
+    String.split_on_chars link ~on:[ '/' ]
+    |> List.map ~f:(Str.global_replace (Str.regexp {|\.|}) "")
+    |> List.map ~f:(Str.global_replace (Str.regexp {|(|}) "")
+    |> List.map ~f:(Str.global_replace (Str.regexp {|)|}) "")
+    |> List.map ~f:(Str.global_replace (Str.regexp {| |}) "_")
+  in
   match List.last split_link with Some title -> title | _ -> ""
 ;;
 
-let get_content ~how_to_fetch ~link =
+let get_content (how_to_fetch : File_fetcher.How_to_fetch.t) ~link =
   let new_link =
     match how_to_fetch with
-    | File_fetcher.How_to_fetch Remote -> "https://en.wikipedia.org/" ^ link
+    | Remote -> "https://en.wikipedia.org/" ^ link
     | _ -> link
   in
   get_linked_articles
@@ -97,13 +77,10 @@ let rec form_link_connections ~link ~max_depth ~how_to_fetch =
   if max_depth = 0
   then []
   else (
-    let their_links = get_content ~how_to_fetch ~link in
+    let their_links = get_content how_to_fetch ~link in
     List.concat_map their_links ~f:(fun link_on_page ->
-      let surface_level_connection =
-        ( { url = link; title = get_title link }
-        , { url = link_on_page; title = get_title link_on_page } )
-      in
-      if List.length (get_content ~how_to_fetch ~link:link_on_page) <> 0
+      let surface_level_connection = link, link_on_page in
+      if List.length (get_content how_to_fetch ~link:link_on_page) <> 0
       then
         [ surface_level_connection ]
         @ form_link_connections
@@ -113,17 +90,35 @@ let rec form_link_connections ~link ~max_depth ~how_to_fetch =
       else [ surface_level_connection ]))
 ;;
 
+module G = Graph.Imperative.Graph.Concrete (Title)
+
+module Dot = Graph.Graphviz.Dot (struct
+  include G
+
+  let edge_attributes _ = [ `Dir `Forward ]
+  let default_edge_attributes _ = []
+  let get_subgraph _ = None
+  let vertex_attributes v = [ `Shape `Box; `Label v; `Fillcolor 1000 ]
+  let vertex_name v = v
+  let default_vertex_attributes _ = []
+  let graph_attributes _ = []
+end)
+
 (* [visualize] should explore all linked articles up to a distance of
    [max_depth] away from the given [origin] article, and output the result as
    a DOT file. It should use the [how_to_fetch] argument along with
    [File_fetcher] to fetch the articles so that the implementation can be
    tested locally on the small dataset in the ../resources/wiki directory. *)
 let visualize ?(max_depth = 3) ~origin ~output_file ~how_to_fetch () : unit =
-  ignore (max_depth : int);
-  ignore (origin : string);
-  ignore (output_file : File_path.t);
-  ignore (how_to_fetch : File_fetcher.How_to_fetch.t);
-  failwith "TODO"
+  let all_articles =
+    form_link_connections ~link:origin ~max_depth ~how_to_fetch
+  in
+  let graph = G.create () in
+  List.iter all_articles ~f:(fun (link1, link2) ->
+    G.add_edge graph (get_title link1) (get_title link2);
+    Dot.output_graph
+      (Out_channel.create (File_path.to_string output_file))
+      graph)
 ;;
 
 let visualize_command =
