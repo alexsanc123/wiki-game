@@ -176,7 +176,7 @@ let find_path ?(max_depth = 10) ~origin ~destination ~how_to_fetch () =
     match Queue.dequeue to_check with
     | None -> None
     | Some path ->
-      if List.length path < max_depth - 1
+      if List.length path < max_depth
       then (
         let parent_article =
           match List.last path with Some link -> link | None -> ""
@@ -191,7 +191,7 @@ let find_path ?(max_depth = 10) ~origin ~destination ~how_to_fetch () =
             Queue.enqueue to_check (path @ [ link_to_check ]));
           traverse depth)
         else traverse depth)
-      else traverse depth
+      else None
   in
   traverse max_depth
 ;;
