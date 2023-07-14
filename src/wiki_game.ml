@@ -59,6 +59,8 @@ let get_title link =
     |> List.map ~f:(Str.global_replace (Str.regexp {|(|}) "")
     |> List.map ~f:(Str.global_replace (Str.regexp {|)|}) "")
     |> List.map ~f:(Str.global_replace (Str.regexp {| |}) "_")
+    |> List.map ~f:(Str.global_replace (Str.regexp {|"|}) "")
+    |> List.map ~f:(Str.global_replace (Str.regexp {|"|}) "")
   in
   match List.last split_link with Some title -> title | _ -> ""
 ;;
@@ -155,12 +157,42 @@ let visualize_command =
 
    [max_depth] is useful to limit the time the program spends exploring the
    graph. *)
+let rec find_article
+  ~path
+  ~(origin : string)
+  ~how_to_fetch
+  ~destination
+  ~visited
+  =
+  let new_path = path @ [ origin ] in
+  if String.equal origin destination
+  then (
+    let title_path =
+      List.map new_path ~f:(fun wiki_url -> get_title wiki_url)
+    in
+    print_s [%message "path:" (title_path : string list)])
+  else (
+    let linked_articles = get_content how_to_fetch ~link:origin in
+    let unseen_articles =
+      List.filter linked_articles ~f:(fun article ->
+        not (Hash_set.mem visited article))
+    in
+    List.iter unseen_articles ~f:(fun sub_link ->
+      Hash_set.add visited sub_link;
+      find_article
+        ~path:new_path
+        ~origin:sub_link
+        ~visited
+        ~destination
+        ~how_to_fetch))
+;;
+
 let find_path ?(max_depth = 3) ~origin ~destination ~how_to_fetch () =
-  ignore (max_depth : int);
-  ignore (origin : string);
-  ignore (destination : string);
-  ignore (how_to_fetch : File_fetcher.How_to_fetch.t);
-  failwith "TODO"
+  let _wiki_map =
+    form_link_connections ~link:origin ~max_depth ~how_to_fetch
+  in
+  let visited = String.Hash_set.create () in
+  find_article ~path:[] ~origin ~how_to_fetch ~destination ~visited
 ;;
 
 let find_path_command =
@@ -180,10 +212,7 @@ let find_path_command =
           (optional_with_default 10 int)
           ~doc:"INT maximum length of path to search for (default 10)"
       in
-      fun () ->
-        match find_path ~max_depth ~origin ~destination ~how_to_fetch () with
-        | None -> print_endline "No path found!"
-        | Some trace -> List.iter trace ~f:print_endline]
+      fun () -> find_path ~max_depth ~origin ~destination ~how_to_fetch ()]
 ;;
 
 let command =
