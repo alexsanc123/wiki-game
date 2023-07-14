@@ -157,42 +157,43 @@ let visualize_command =
 
    [max_depth] is useful to limit the time the program spends exploring the
    graph. *)
-let rec find_article
-  ~path
-  ~(origin : string)
-  ~how_to_fetch
-  ~destination
-  ~visited
-  =
-  let new_path = path @ [ origin ] in
-  if String.equal origin destination
-  then (
-    let title_path =
-      List.map new_path ~f:(fun wiki_url -> get_title wiki_url)
-    in
-    print_s [%message "path:" (title_path : string list)])
-  else (
-    let linked_articles = get_content how_to_fetch ~link:origin in
-    let unseen_articles =
-      List.filter linked_articles ~f:(fun article ->
-        not (Hash_set.mem visited article))
-    in
-    List.iter unseen_articles ~f:(fun sub_link ->
-      Hash_set.add visited sub_link;
-      find_article
-        ~path:new_path
-        ~origin:sub_link
-        ~visited
-        ~destination
-        ~how_to_fetch))
-;;
+(* let rec find_article ~path ~(origin : string) ~how_to_fetch ~destination
+   ~visited = let new_path = path @ [ origin ] in if String.equal origin
+   destination then ( let title_path = List.map new_path ~f:(fun wiki_url ->
+   get_title wiki_url) in print_s [%message "path:" (title_path : string
+   list)]) else ( let linked_articles = get_content how_to_fetch ~link:origin
+   in let unseen_articles = List.filter linked_articles ~f:(fun article ->
+   not (Hash_set.mem visited article)) in List.iter unseen_articles ~f:(fun
+   sub_link -> Hash_set.add visited sub_link; find_article ~path:new_path
+   ~origin:sub_link ~visited ~destination ~how_to_fetch)) ;; *)
 
-let find_path ?(max_depth = 3) ~origin ~destination ~how_to_fetch () =
-  let _wiki_map =
-    form_link_connections ~link:origin ~max_depth ~how_to_fetch
-  in
+let find_path ?(max_depth = 10) ~origin ~destination ~how_to_fetch () =
+  let destination_title = get_title destination in
   let visited = String.Hash_set.create () in
-  find_article ~path:[] ~origin ~how_to_fetch ~destination ~visited
+  let to_check = Queue.create () in
+  Queue.enqueue to_check [ origin ];
+  let rec traverse (depth : int) : string list option =
+    match Queue.dequeue to_check with
+    | None -> None
+    | Some path ->
+      if List.length path < max_depth - 1
+      then (
+        let parent_article =
+          match List.last path with Some link -> link | None -> ""
+        in
+        if String.( = ) destination_title (get_title parent_article)
+        then Some path
+        else if not (Hash_set.mem visited parent_article)
+        then (
+          Hash_set.add visited parent_article;
+          let their_links = get_content how_to_fetch ~link:parent_article in
+          List.iter their_links ~f:(fun link_to_check ->
+            Queue.enqueue to_check (path @ [ link_to_check ]));
+          traverse depth)
+        else traverse depth)
+      else traverse depth
+  in
+  traverse max_depth
 ;;
 
 let find_path_command =
@@ -212,7 +213,12 @@ let find_path_command =
           (optional_with_default 10 int)
           ~doc:"INT maximum length of path to search for (default 10)"
       in
-      fun () -> find_path ~max_depth ~origin ~destination ~how_to_fetch ()]
+      fun () ->
+        match find_path ~max_depth ~origin ~destination ~how_to_fetch () with
+        | None -> print_endline "No path found!"
+        | Some trace ->
+          List.map trace ~f:(fun wiki -> get_title wiki)
+          |> List.iter ~f:print_endline]
 ;;
 
 let command =
