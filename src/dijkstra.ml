@@ -128,17 +128,13 @@ module Nodes = struct
 
   (* Exercise 3: Given a [t], find the next node to process by selecting the
      node with the smallest distance along with its via route. *)
-  let next_node t : (Node_id.t * (int * Node_id.t)) option = 
-    let to_do_nodes = List.filter t ~f:(fun (node, _) -> 
-      match Node.state node with 
-      | Origin -> false
-      | Unseen -> false
-      | _ -> true) in
-    let sorted = List.sort to_do_nodes ~compare:(fun (todo_node, todo_state) -> State.distance todo_state) in
-    let todo_node = match List.last sorted with 
-    | Some (node, state) -> (node, state)
-    | _ -> ()
-
+  let next_node t : (Node_id.t * (int * Node_id.t)) option =
+    let to_do_nodes = List.filter t ~f:(fun (node, _) ->
+       match Node.state node with | Todo {distance;via} -> true | _ -> false) in 
+    let get_min = List.fold to_do_nodes ~init:() ~f:(fun (node, (state {distance;via})) ->) 
+       
+    
+  ;;
 
   let%expect_test ("next_node" [@tags "disabled"]) =
     let n = Node_id.create in
